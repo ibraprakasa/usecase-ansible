@@ -1,33 +1,82 @@
 ---
-- name: Setup Apache HTTP Server
-  hosts: test
+- name: Create Folders and Set Permissions
+  hosts: target_servers
   become: true
+  vars:
+    folders:
+      - path: /opt/application
+        owner: admin
+        group: developers
+        mode: '0755'
+        subdirs:
+          - logs
+          - data
+          - config
+          - temp
+      - path: /opt/backup
+        owner: backup
+        group: backup
+        mode: '0700'
+        subdirs:
+          - daily
+          - weekly
+          - monthly
+
   tasks:
-    - name: Install httpd package
-      dnf:
-        name: httpd
+    - name: Ensure groups exist
+      group:
+        name: "{{ item }}"
         state: present
+      loop:
+        - developers
+        - backup
 
-    - name: Enable httpd service
-      systemd:
-        name: httpd
-        enabled: yes
+    - name: Ensure users exist
+      user:
+        name: "{{ item.user }}"
+        group: "{{ item.group }}"
+        state: present
+      loop:
+        - { user: 'admin', group: 'developers' }
+        - { user: 'backup', group: 'backup' }
 
-    - name: Start httpd service
-      systemd:
-        name: httpd
-        state: started
+    - name: Create parent directories
+      file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      loop: "{{ folders }}"
 
-    - name: Configure SELinux to allow httpd on port 80
-      seboolean:
-        name: httpd_can_network_connect
-        state: yes
-        persistent: yes
+    - name: Create subdirectories
+      file:
+        path: "{{ item.0.path }}/{{ item.1 }}"
+        state: directory
+        owner: "{{ item.0.owner }}"
+        group: "{{ item.0.group }}"
+        mode: "{{ item.0.mode }}"
+      with_subelements:
+        - "{{ folders }}"
+        - subdirs
 
-    - name: Create index.html file
-      copy:
-        content: "Hello Gondok"
-        dest: /var/www/html/index.html
-        owner: apache
-        group: apache
-        mode: '0644'
+    - name: Set special permissions for logs directory
+      file:
+        path: /opt/application/logs
+        state: directory
+        mode: '0744'
+      when: "'/opt/application/logs' in item.0.path + '/' + item.1"
+      with_subelements:
+        - "{{ folders }}"
+        - subdirs
+
+    - name: Verify permissions are set correctly
+      command: "ls -l {{ item.path }}"
+      register: ls_output
+      changed_when: false
+      loop: "{{ folders }}"
+
+    - name: Display folder permissions
+      debug:
+        msg: "Permissions for {{ item.item.path }}: {{ item.stdout }}"
+      loop: "{{ ls_output.results }}"
