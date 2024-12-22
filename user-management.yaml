@@ -1,6 +1,6 @@
 ---
 - name: Add users to RHEL 9.4 systems
-  hosts: rhel_servers
+  hosts: all
   become: true
   vars:
     users:
