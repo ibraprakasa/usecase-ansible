@@ -31,12 +31,3 @@
         owner: apache
         group: apache
         mode: '0644'
-
-    - name: Ensure SELinux context is correct for web content
-      sefcontext:
-        target: '/var/www/html(/.*)?'
-        setype: httpd_sys_content_t
-        state: present
-
-    - name: Apply SELinux context to web directory
-      command: restorecon -Rv /var/www/html
