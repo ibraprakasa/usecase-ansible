@@ -1,0 +1,42 @@
+---
+- name: Setup Apache HTTP Server
+  hosts: test
+  become: true
+  tasks:
+    - name: Install httpd package
+      dnf:
+        name: httpd
+        state: present
+
+    - name: Enable httpd service
+      systemd:
+        name: httpd
+        enabled: yes
+
+    - name: Start httpd service
+      systemd:
+        name: httpd
+        state: started
+
+    - name: Configure SELinux to allow httpd on port 80
+      seboolean:
+        name: httpd_can_network_connect
+        state: yes
+        persistent: yes
+
+    - name: Create index.html file
+      copy:
+        content: "Hello Gondok"
+        dest: /var/www/html/index.html
+        owner: apache
+        group: apache
+        mode: '0644'
+
+    - name: Ensure SELinux context is correct for web content
+      sefcontext:
+        target: '/var/www/html(/.*)?'
+        setype: httpd_sys_content_t
+        state: present
+
+    - name: Apply SELinux context to web directory
+      command: restorecon -Rv /var/www/html
