@@ -1,0 +1,60 @@
+---
+- name: Add users to RHEL 9.4 systems
+  hosts: rhel_servers
+  become: true
+  vars:
+    users:
+      - username: john
+        comment: "John Doe"
+        password: "{{ 'password123' | password_hash('sha512') }}"
+        groups: ["wheel"]
+        shell: /bin/bash
+        create_home: true
+      - username: jane
+        comment: "Jane Smith"
+        password: "{{ 'password456' | password_hash('sha512') }}"
+        groups: ["users"]
+        shell: /bin/bash
+        create_home: true
+
+  tasks:
+    - name: Create groups if they don't exist
+      group:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - wheel
+        - users
+
+    - name: Add users
+      user:
+        name: "{{ item.username }}"
+        comment: "{{ item.comment }}"
+        password: "{{ item.password }}"
+        groups: "{{ item.groups | join(',') }}"
+        shell: "{{ item.shell }}"
+        create_home: "{{ item.create_home }}"
+        state: present
+      loop: "{{ users }}"
+
+    - name: Set SSH authorized keys for users
+      authorized_key:
+        user: "{{ item.username }}"
+        key: "{{ lookup('file', 'files/' + item.username + '.pub') }}"
+        state: present
+      loop: "{{ users }}"
+      ignore_errors: true  # Skip if public key file doesn't exist
+
+    - name: Set default password policies
+      lineinfile:
+        path: /etc/login.defs
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^PASS_MAX_DAYS', line: 'PASS_MAX_DAYS   90' }
+        - { regexp: '^PASS_MIN_DAYS', line: 'PASS_MIN_DAYS   7' }
+        - { regexp: '^PASS_WARN_AGE', line: 'PASS_WARN_AGE   14' }
+
+    - name: Force password change on first login
+      command: chage -d 0 {{ item.username }}
+      loop: "{{ users }}"
