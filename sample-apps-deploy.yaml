@@ -1,6 +1,6 @@
 ---
 - name: Create Folders and Set Permissions
-  hosts: target_servers
+  hosts: test
   become: true
   vars:
     folders:
